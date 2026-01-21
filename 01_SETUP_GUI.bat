@@ -6,7 +6,7 @@ echo.
 
 REM Set Python 3.10 path
 set PYTHON310_PATH=D:\AI\heartlib\drivers\310\python.exe
-set TRITON_WHL=D:\AI\heartlib\drivers\triton-2.1.0-cp310-cp310-win_amd64.whl
+set TRITON_URL=https://huggingface.co/madbuda/triton-windows-builds/resolve/main/triton-2.1.0-cp310-cp310-win_amd64.whl
 
 REM Check if Python 3.10 exists at specified location
 if not exist "%PYTHON310_PATH%" (
@@ -58,15 +58,10 @@ if errorlevel 1 (
 
 echo.
 echo [5/6] Installing Triton...
-if exist "%TRITON_WHL%" (
-    python -m pip install "%TRITON_WHL%"
-    if errorlevel 1 (
-        echo WARNING: Failed to install Triton from local wheel
-        echo Trying to install from PyPI...
-        python -m pip install triton
-    )
-) else (
-    echo WARNING: Triton wheel not found at %TRITON_WHL%
+echo Downloading Triton from Hugging Face...
+python -m pip install "%TRITON_URL%"
+if errorlevel 1 (
+    echo WARNING: Failed to install Triton from Hugging Face
     echo Trying to install from PyPI...
     python -m pip install triton
 )
