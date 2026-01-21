@@ -1,0 +1,30 @@
+HeartMuLa Music Generator - Release Package
+==========================================
+
+Version: 1.0
+Release Date: 20.01.2026
+
+Contents:
+- Source code (src/)
+- GUI application (gui_app.py)
+- Setup scripts (01_SETUP_GUI.bat, 02_START_GUI.bat, etc.)
+- Documentation (*.md files)
+- Python 3.10 (drivers/310/)
+- Triton wheel (drivers/)
+- Example files (examples/, assets/)
+
+Quick Start:
+1. Run 01_SETUP_GUI.bat
+2. Download models when prompted (or run download_models.bat later)
+3. Run 02_START_GUI.bat
+4. Load model in Settings tab
+5. Generate music!
+
+For detailed instructions, see QUICK_START.md
+
+Requirements:
+- Windows 10/11
+- NVIDIA GPU with 8GB+ VRAM
+- 20GB free disk space (15GB for models)
+- Internet connection for model download
+

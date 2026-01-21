@@ -1,0 +1,33 @@
+# GUI Application Requirements for HeartMuLa
+# Python 3.10 REQUIRED
+
+# ⚠️ CRITICAL: PyTorch MUST be installed BEFORE running pip install -e .
+# The setup_gui.bat script handles this automatically in the correct order:
+# 1. Install PyTorch with CUDA from: https://download.pytorch.org/whl/cu121
+# 2. Install Triton
+# 3. Install HeartMuLa (pip install -e .)
+# 4. Install these GUI requirements
+#
+# Manual installation if needed:
+# python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Core dependencies
+transformers>=4.36.0
+tokenizers>=0.15.0
+
+# FP8 Quantization Support (Recommended for 8GB VRAM)
+# Reduces memory usage by ~50%
+bitsandbytes>=0.41.0
+
+# Accelerate for better model loading
+accelerate>=0.25.0
+
+# Additional dependencies
+scipy>=1.10.0
+numpy>=1.24.0
+
+# GUI image support
+Pillow>=10.0.0
+
+# Note: tkinter is included with Python standard library
+# Triton is installed separately via setup_gui.bat from local wheel file
