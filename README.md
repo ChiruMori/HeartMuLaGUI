@@ -75,6 +75,13 @@ HeartMuLa is a family of open-source music foundation models that includes:
 
 ### Installation (5 minutes + model download)
 
+#### Step 0: Clone Repository
+First, clone this repository and navigate to the folder:
+```bash
+git clone https://github.com/Starnodes2024/HeartMuLaGUI.git
+cd HeartMuLaGUI
+```
+
 #### Step 1: Setup
 Double-click `01_SETUP_GUI.bat` or run:
 ```bash
