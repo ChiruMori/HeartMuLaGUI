@@ -820,27 +820,19 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 }
                 dtype = dtype_map[self.dtype_var.get()]
                 
-                bnb_config = None
-                if self.use_fp8_var.get() and BITSANDBYTES_AVAILABLE:
-                    self.log("Enabling FP8 quantization for reduced VRAM usage...")
-                    bnb_config = BitsAndBytesConfig(
-                        load_in_8bit=True,
-                        llm_int8_threshold=6.0,
-                        llm_int8_has_fp16_weight=False,
-                    )
+                # Note: bnb_config is no longer supported in updated heartlib
+                # Use optimized loading mode with FP8 models instead
+                if self.use_fp8_var.get():
+                    self.log("FP8 mode enabled - use 'optimized' loading mode for FP8 models")
                 
                 self.pipe = HeartMuLaGenPipeline.from_pretrained(
                     model_path,
                     device=device,
                     dtype=dtype,
-                    version=self.version_var.get(),
-                    bnb_config=bnb_config
+                    version=self.version_var.get()
                 )
                 
-                if bnb_config:
-                    self.log("Model loaded successfully with FP8 quantization!")
-                else:
-                    self.log("Model loaded successfully!")
+                self.log("Model loaded successfully!")
                 self.update_status("Model loaded - Ready")
                 self.model_status_label.config(text="Model: Loaded", foreground="green")
                 self.generate_btn.config(state='normal')

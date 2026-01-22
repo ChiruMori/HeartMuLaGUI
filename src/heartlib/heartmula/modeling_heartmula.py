@@ -153,7 +153,6 @@ class HeartMuLa(PreTrainedModel):
         self.post_init()
 
     def setup_caches(self, max_batch_size: int):
-        import warnings
         dtype = next(self.parameters()).dtype
         device = next(self.parameters()).device
 
@@ -163,15 +162,12 @@ class HeartMuLa(PreTrainedModel):
             pass
 
         with device:
-            # Suppress "Key value caches are already setup" warnings
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', message='.*caches are already setup.*')
-                self.backbone.setup_caches(max_batch_size, dtype)
-                self.decoder.setup_caches(
-                    max_batch_size,
-                    dtype,
-                    decoder_max_seq_len=self.config.audio_num_codebooks,
-                )
+            self.backbone.setup_caches(max_batch_size, dtype)
+            self.decoder.setup_caches(
+                max_batch_size,
+                dtype,
+                decoder_max_seq_len=self.config.audio_num_codebooks,
+            )
 
         self.register_buffer(
             "backbone_causal_mask",
