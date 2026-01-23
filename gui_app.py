@@ -10,6 +10,14 @@ import torch
 from heartlib import HeartMuLaGenPipeline
 from PIL import Image, ImageTk
 
+# Try to import inline audio player
+try:
+    from audio_player import InlineAudioPlayer
+    AUDIO_PLAYER_AVAILABLE = True
+except ImportError:
+    AUDIO_PLAYER_AVAILABLE = False
+    print("Audio player not available - using system default player")
+
 try:
     from transformers import BitsAndBytesConfig
     BITSANDBYTES_AVAILABLE = True
@@ -208,58 +216,50 @@ class HeartMuLaGUI:
         notebook = ttk.Notebook(main_container)
         notebook.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
+        # Store notebook reference
+        self.notebook = notebook
+        
         generation_frame = ttk.Frame(notebook, padding="10")
         batch_frame = ttk.Frame(notebook, padding="10")
+        library_frame = ttk.Frame(notebook, padding="10")
         settings_frame = ttk.Frame(notebook, padding="10")
         info_frame = ttk.Frame(notebook, padding="10")
         
         notebook.add(generation_frame, text="Music Generation")
         notebook.add(batch_frame, text="Batch Queue")
+        notebook.add(library_frame, text="🎵 Music Library")
         notebook.add(settings_frame, text="Settings")
         notebook.add(info_frame, text="Info")
         
+        # Bind tab change event to show/hide log and progress
+        notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+        
+        # Initialize generation history (will load after log_text is created)
+        self.generation_history = []
+        
         self.setup_generation_tab(generation_frame)
         self.setup_batch_tab(batch_frame)
+        self.setup_library_tab(library_frame)
         self.setup_settings_tab(settings_frame)
         self.setup_info_tab(info_frame)
         
-        log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="5")
-        log_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        # Store reference to log frame
+        self.log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="5")
+        self.log_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
         main_container.rowconfigure(1, weight=0)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, wrap=tk.WORD, state='disabled')
+        self.log_text = scrolledtext.ScrolledText(self.log_frame, height=8, wrap=tk.WORD, state='disabled')
         self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
+        self.log_frame.columnconfigure(0, weight=1)
+        self.log_frame.rowconfigure(0, weight=1)
         
-        # Progress bars frame
-        progress_frame = ttk.LabelFrame(main_container, text="Generation Progress", padding="5")
-        progress_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
-        progress_frame.columnconfigure(1, weight=1)
-        
-        # Step 1: Prompt Processing
-        ttk.Label(progress_frame, text="1. Prompt Processing:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
-        self.progress_prompt = ttk.Progressbar(progress_frame, mode='determinate', length=300)
-        self.progress_prompt.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=2)
-        self.progress_prompt_label = ttk.Label(progress_frame, text="0/0")
-        self.progress_prompt_label.grid(row=0, column=2, sticky=tk.W, padx=(10, 0))
-        
-        # Step 2: Frame Generation
-        ttk.Label(progress_frame, text="2. Frame Generation:").grid(row=1, column=0, sticky=tk.W, padx=(0, 10))
-        self.progress_frames = ttk.Progressbar(progress_frame, mode='determinate', length=300)
-        self.progress_frames.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=2)
-        self.progress_frames_label = ttk.Label(progress_frame, text="0/0")
-        self.progress_frames_label.grid(row=1, column=2, sticky=tk.W, padx=(10, 0))
-        
-        # Step 3: Audio Decoding
-        ttk.Label(progress_frame, text="3. Audio Decoding:").grid(row=2, column=0, sticky=tk.W, padx=(0, 10))
-        self.progress_decode = ttk.Progressbar(progress_frame, mode='determinate', length=300)
-        self.progress_decode.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=2)
-        self.progress_decode_label = ttk.Label(progress_frame, text="0/0")
-        self.progress_decode_label.grid(row=2, column=2, sticky=tk.W, padx=(10, 0))
-        
+        # Status bar (no separate progress frame - all progress shown in log)
         self.status_bar = ttk.Label(main_container, text="Ready", relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        
+        # Load generation history after all UI elements are created
+        self.load_generation_history()
+        self.populate_library()
         
     def setup_generation_tab(self, parent):
         parent.columnconfigure(0, weight=1)
@@ -272,7 +272,7 @@ class HeartMuLaGUI:
         top_container.columnconfigure(0, weight=1)
         top_container.columnconfigure(1, weight=0)
         
-        tags_frame = ttk.LabelFrame(top_container, text="Select Tags (comma-separated in output)", padding="10")
+        tags_frame = ttk.LabelFrame(top_container, text="Style Tags Builder", padding="10")
         tags_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N), padx=(0, 10))
         tags_frame.columnconfigure(0, weight=1)
         
@@ -302,38 +302,66 @@ class HeartMuLaGUI:
                                  justify=tk.CENTER, foreground="red")
             error_label.pack()
         
-        tags_canvas = tk.Canvas(tags_frame, height=200)
-        self.tags_canvas = tags_canvas  # Store reference for theme updates
-        tags_scrollbar = ttk.Scrollbar(tags_frame, orient="vertical", command=tags_canvas.yview)
-        tags_scrollable = ttk.Frame(tags_canvas)
+        # Dropdown-based tag builder (like ComfyUI nodes)
+        builder_frame = ttk.Frame(tags_frame)
+        builder_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        builder_frame.columnconfigure(1, weight=1)
+        builder_frame.columnconfigure(3, weight=1)
         
-        tags_scrollable.bind(
-            "<Configure>",
-            lambda e: tags_canvas.configure(scrollregion=tags_canvas.bbox("all"))
-        )
+        # Row 1: Genre and Vocal Type
+        ttk.Label(builder_frame, text="Genre:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5), pady=5)
+        self.genre_var = tk.StringVar(value="pop")
+        genre_combo = ttk.Combobox(builder_frame, textvariable=self.genre_var, width=18, state="readonly")
+        genre_combo['values'] = ["pop", "rock", "electronic", "jazz", "classical", "hip-hop", "r&b", "country", 
+                                 "folk", "metal", "indie", "blues", "reggae", "soul", "funk", "disco", "punk", 
+                                 "alternative", "ambient", "lo-fi", "acoustic", "orchestral", "cinematic", "edm"]
+        genre_combo.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+        genre_combo.bind('<<ComboboxSelected>>', lambda e: self.build_tags_from_dropdowns())
         
-        tags_canvas.create_window((0, 0), window=tags_scrollable, anchor="nw")
-        tags_canvas.configure(yscrollcommand=tags_scrollbar.set)
+        ttk.Label(builder_frame, text="Vocal Type:").grid(row=0, column=2, sticky=tk.W, padx=(15, 5), pady=5)
+        self.vocal_var = tk.StringVar(value="female vocal")
+        vocal_combo = ttk.Combobox(builder_frame, textvariable=self.vocal_var, width=18, state="readonly")
+        vocal_combo['values'] = ["female vocal", "male vocal", "duet", "choir", "instrumental", 
+                                "vocal harmony", "rap", "spoken word"]
+        vocal_combo.grid(row=0, column=3, sticky=(tk.W, tk.E), padx=5, pady=5)
+        vocal_combo.bind('<<ComboboxSelected>>', lambda e: self.build_tags_from_dropdowns())
         
-        tags_canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        tags_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        # Row 2: Mood and Tempo
+        ttk.Label(builder_frame, text="Mood:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=5)
+        self.mood_var = tk.StringVar(value="energetic")
+        mood_combo = ttk.Combobox(builder_frame, textvariable=self.mood_var, width=18, state="readonly")
+        mood_combo['values'] = ["energetic", "melancholic", "uplifting", "calm", "aggressive", "romantic", 
+                               "dreamy", "dark", "happy", "sad", "nostalgic", "epic", "peaceful", "intense", 
+                               "playful", "mysterious"]
+        mood_combo.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+        mood_combo.bind('<<ComboboxSelected>>', lambda e: self.build_tags_from_dropdowns())
         
-        self.tag_vars = {}
-        for idx, tag in enumerate(self.available_tags):
-            var = tk.BooleanVar()
-            self.tag_vars[tag] = var
-            cb = ttk.Checkbutton(tags_scrollable, text=tag, variable=var)
-            cb.grid(row=idx // 6, column=idx % 6, sticky=tk.W, padx=5, pady=2)
+        ttk.Label(builder_frame, text="Tempo:").grid(row=1, column=2, sticky=tk.W, padx=(15, 5), pady=5)
+        self.tempo_var = tk.StringVar(value="medium")
+        tempo_combo = ttk.Combobox(builder_frame, textvariable=self.tempo_var, width=18, state="readonly")
+        tempo_combo['values'] = ["very slow", "slow", "medium", "fast", "very fast"]
+        tempo_combo.grid(row=1, column=3, sticky=(tk.W, tk.E), padx=5, pady=5)
+        tempo_combo.bind('<<ComboboxSelected>>', lambda e: self.build_tags_from_dropdowns())
         
+        # Row 3: Additional/Custom Tags
+        ttk.Label(builder_frame, text="Custom Tags:").grid(row=2, column=0, sticky=tk.W, padx=(0, 5), pady=5)
+        self.custom_tags_var = tk.StringVar(value="")
+        custom_entry = ttk.Entry(builder_frame, textvariable=self.custom_tags_var)
+        custom_entry.grid(row=2, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=5)
+        custom_entry.bind('<KeyRelease>', lambda e: self.build_tags_from_dropdowns())
+        ttk.Label(builder_frame, text="(comma-separated, e.g., piano,guitar,synth)", foreground="gray", font=('TkDefaultFont', 8)).grid(row=3, column=1, columnspan=3, sticky=tk.W, padx=5)
         
-        selected_tags_frame = ttk.Frame(tags_frame)
-        selected_tags_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0))
-        ttk.Label(selected_tags_frame, text="Selected Tags:").grid(row=0, column=0, sticky=tk.W)
-        self.selected_tags_label = ttk.Label(selected_tags_frame, text="None")
-        self.selected_tags_label.grid(row=0, column=1, sticky=tk.W, padx=(5, 0))
+        # Preview of built tags
+        preview_frame = ttk.Frame(tags_frame)
+        preview_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
+        ttk.Label(preview_frame, text="Generated Tags:", font=('TkDefaultFont', 9, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        self.selected_tags_label = ttk.Label(preview_frame, text="pop,female vocal,energetic,medium", 
+                                            foreground="#2E7D32", font=('TkDefaultFont', 9, 'bold'))
+        self.selected_tags_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(preview_frame, text="🎲 Random ALL", command=self.randomize_all, width=15).pack(side=tk.RIGHT, padx=(10, 0))
         
-        for tag, var in self.tag_vars.items():
-            var.trace_add('write', lambda *args: self.update_selected_tags())
+        # Initialize tags
+        self.build_tags_from_dropdowns()
         
         # Create container for lyrics and parameters side-by-side
         content_container = ttk.Frame(parent)
@@ -401,6 +429,16 @@ class HeartMuLaGUI:
         ttk.Label(params_frame, text="(guidance strength, 1.0-3.0)", foreground="gray").grid(row=row, column=2, sticky=tk.W)
         
         row += 1
+        ttk.Label(params_frame, text="Seed:").grid(row=row, column=0, sticky=tk.W, pady=5)
+        self.seed_var = tk.StringVar(value="-1")
+        seed_frame = ttk.Frame(params_frame)
+        seed_frame.grid(row=row, column=1, columnspan=2, sticky=tk.W, padx=5)
+        ttk.Entry(seed_frame, textvariable=self.seed_var, width=15).pack(side=tk.LEFT)
+        ttk.Button(seed_frame, text="🎲 Random", command=self.randomize_seed, width=10).pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Button(seed_frame, text="🔄 Reset", command=self.reset_seed, width=8).pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Label(params_frame, text="(-1 for random)", foreground="gray").grid(row=row+1, column=1, columnspan=2, sticky=tk.W, padx=5)
+        
+        row += 2
         ttk.Label(params_frame, text="Output Filename:").grid(row=row, column=0, sticky=tk.W, pady=5)
         self.filename_var = tk.StringVar(value="output")
         ttk.Entry(params_frame, textvariable=self.filename_var, width=30).grid(row=row, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=5)
@@ -422,6 +460,41 @@ class HeartMuLaGUI:
         ms = seconds * 1000
         self.max_length_var.set(str(ms))
         self.audio_length_label.config(text=f"{seconds} seconds ({ms} ms)")
+    
+    def setup_library_tab(self, parent):
+        """Setup Music Library tab with playback and history"""
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(1, weight=1)  # Give weight to content row, not header
+        
+        # Compact header - single row with minimal padding
+        header_frame = ttk.Frame(parent)
+        header_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        
+        ttk.Label(header_frame, text="🎵 Music Library", font=('TkDefaultFont', 10, 'bold')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(header_frame, text="🔄 Refresh", command=self.refresh_library, width=10).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(header_frame, text="🗑️ Clear", command=self.clear_library_history, width=8).pack(side=tk.RIGHT, padx=2)
+        
+        # Scrollable library content
+        library_canvas = tk.Canvas(parent, bg=THEMES[self.current_theme]["bg"], highlightthickness=0)
+        library_scrollbar = ttk.Scrollbar(parent, orient="vertical", command=library_canvas.yview)
+        self.library_scrollable = ttk.Frame(library_canvas)
+        
+        # Store canvas reference for theme updates
+        self.library_canvas = library_canvas
+        
+        self.library_scrollable.bind(
+            "<Configure>",
+            lambda e: library_canvas.configure(scrollregion=library_canvas.bbox("all"))
+        )
+        
+        library_canvas.create_window((0, 0), window=self.library_scrollable, anchor="nw")
+        library_canvas.configure(yscrollcommand=library_scrollbar.set)
+        
+        library_canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        library_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
+        
+        # Populate library
+        self.populate_library()
     
     def setup_batch_tab(self, parent):
         parent.columnconfigure(0, weight=1)
@@ -708,17 +781,53 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
             self.log(f"Error opening URL: {e}")
             messagebox.showerror("Error", f"Could not open URL:\n{url}\n\nError: {e}")
         
+    def build_tags_from_dropdowns(self):
+        """Build comma-separated tags from dropdown selections (like ComfyUI nodes)"""
+        tags = []
+        
+        # Add primary selections
+        tags.append(self.genre_var.get())
+        tags.append(self.vocal_var.get())
+        tags.append(self.mood_var.get())
+        tags.append(self.tempo_var.get())
+        
+        # Add custom tags if specified
+        custom = self.custom_tags_var.get().strip()
+        if custom:
+            for tag in custom.split(","):
+                tag = tag.strip().lower()
+                if tag:
+                    tags.append(tag)
+        
+        # Join without spaces for final prompt
+        tags_str = ",".join(tags)
+        self.selected_tags_label.config(text=tags_str)
+        
+        return tags_str
+    
     def update_selected_tags(self):
-        selected = [tag for tag, var in self.tag_vars.items() if var.get()]
-        if selected:
-            tags_str = ",".join(selected)
-            self.selected_tags_label.config(text=tags_str)
-        else:
-            self.selected_tags_label.config(text="None")
+        """Legacy method - now calls build_tags_from_dropdowns"""
+        return self.build_tags_from_dropdowns()
     
     def get_selected_tags(self):
-        selected = [tag for tag, var in self.tag_vars.items() if var.get()]
-        return ",".join(selected) if selected else ""
+        """Get tags from dropdown builder"""
+        tags = []
+        
+        # Add primary selections
+        tags.append(self.genre_var.get())
+        tags.append(self.vocal_var.get())
+        tags.append(self.mood_var.get())
+        tags.append(self.tempo_var.get())
+        
+        # Add custom tags if specified
+        custom = self.custom_tags_var.get().strip()
+        if custom:
+            for tag in custom.split(","):
+                tag = tag.strip().lower()
+                if tag:
+                    tags.append(tag)
+        
+        return ",".join(tags)
     
     def browse_model_path(self):
         path = filedialog.askdirectory(title="Select Model Directory")
@@ -731,6 +840,10 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
             self.output_folder_var.set(path)
     
     def log(self, message):
+        # Filter out cache warning messages
+        if "Key value caches are already setup" in message:
+            return
+        
         self.log_text.config(state='normal')
         timestamp = datetime.now().strftime("%H:%M:%S")
         log_msg = f"[{timestamp}] {message}"
@@ -934,7 +1047,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
             try:
                 self.generate_btn.config(state='disabled')
                 self.add_batch_btn.config(state='disabled')
-                self.reset_progress()
                 
                 output_folder = Path(self.output_folder_var.get())
                 output_folder.mkdir(parents=True, exist_ok=True)
@@ -943,6 +1055,13 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 if self.timestamp_var.get():
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     filename = f"{filename}_{timestamp}"
+                else:
+                    # Handle filename collision by adding numbers
+                    base_filename = filename
+                    counter = 1
+                    while (output_folder / f"{filename}.mp3").exists():
+                        filename = f"{base_filename}_{counter:02d}"
+                        counter += 1
                 
                 save_path = output_folder / f"{filename}.mp3"
                 
@@ -955,13 +1074,29 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 temperature = float(self.temperature_var.get())
                 cfg_scale = float(self.cfg_scale_var.get())
                 
+                # Handle seed for reproducible generation
+                seed = int(self.seed_var.get())
+                if seed == -1:
+                    import random
+                    seed = random.randint(0, 2147483647)
+                    self.log(f"Using random seed: {seed}")
+                else:
+                    self.log(f"Using seed: {seed}")
+                
+                # Set seed for reproducibility
+                import numpy as np
+                np.random.seed(seed)
+                torch.manual_seed(seed)
+                if torch.cuda.is_available():
+                    torch.cuda.manual_seed(seed)
+                    torch.cuda.manual_seed_all(seed)
+                
                 # Step 1: Prompt Processing
-                self.log("Step 1/3: Processing prompt...")
-                self.update_progress("prompt", 1, 1)
+                self.log("  Step 1/3: Processing prompt...")
                 
                 # Step 2: Frame Generation (estimated based on audio length)
                 max_frames = max_length // 80  # 80ms per frame
-                self.log(f"Step 2/3: Generating {max_frames} audio frames...")
+                self.log(f"  Step 2/3: Generating {max_frames} frames...")
                 
                 # We'll update this during generation via a callback if possible
                 # For now, simulate progress
@@ -979,8 +1114,7 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                     )
                 
                 # Step 3: Audio Decoding
-                self.log("Step 3/3: Decoding audio...")
-                self.update_progress("decode", 1, 1)
+                self.log("  Step 3/3: Decoding audio...")
                 
                 # Calculate generation time
                 end_time = datetime.now()
@@ -991,6 +1125,19 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 self.log(f"Music generated successfully: {save_path}")
                 self.log(f"Generated in {minutes} min {seconds} sec")
                 self.update_status("Generation complete")
+                
+                # Save to library history
+                generation_settings = {
+                    "tags": tags,
+                    "lyrics": lyrics,
+                    "max_length_ms": max_length,
+                    "topk": topk,
+                    "temperature": temperature,
+                    "cfg_scale": cfg_scale,
+                    "seed": seed
+                }
+                self.save_generation_to_history(save_path, generation_settings)
+                
                 messagebox.showinfo("Success", f"Music generated successfully!\n{save_path}\n\nGenerated in {minutes} min {seconds} sec")
                 
             except Exception as e:
@@ -1001,7 +1148,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 self.is_generating = False
                 self.generate_btn.config(state='normal')
                 self.add_batch_btn.config(state='normal')
-                self.reset_progress()
         
         threading.Thread(target=generate_thread, daemon=True).start()
     
@@ -1091,7 +1237,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                     item_start_time = datetime.now()  # Track item start time
                     self.log(f"Processing batch item {idx}/{total}: {item['filename']}")
                     self.update_status(f"Processing batch {idx}/{total}")
-                    self.reset_progress()
                     
                     filename = item['filename']
                     if self.timestamp_var.get():
@@ -1102,7 +1247,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                     
                     # Step 1: Prompt Processing
                     self.log(f"  Step 1/3: Processing prompt...")
-                    self.update_progress("prompt", 1, 1)
                     
                     # Step 2: Frame Generation
                     max_frames = item["max_audio_length_ms"] // 80
@@ -1123,7 +1267,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                     
                     # Step 3: Audio Decoding
                     self.log(f"  Step 3/3: Decoding audio...")
-                    self.update_progress("decode", 1, 1)
                     
                     # Calculate item generation time
                     item_end_time = datetime.now()
@@ -1160,12 +1303,91 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
         
         threading.Thread(target=batch_thread, daemon=True).start()
     
+    def randomize_seed(self):
+        """Generate a random seed"""
+        import random
+        seed = random.randint(0, 2147483647)
+        self.seed_var.set(str(seed))
+        self.log(f"Random seed generated: {seed}")
+    
+    def reset_seed(self):
+        """Reset seed to default (-1 = random)"""
+        self.seed_var.set("-1")
+        self.log("Seed reset to -1 (random)")
+    
+    def randomize_all(self):
+        """Randomize all tags and generation parameters"""
+        import random
+        
+        # Define option lists
+        genre_options = ["pop", "rock", "electronic", "jazz", "classical", "hip-hop", "r&b", "country", 
+                        "folk", "metal", "indie", "blues", "reggae", "soul", "funk", "disco", "punk", 
+                        "alternative", "ambient", "lo-fi", "acoustic", "orchestral", "cinematic", "edm"]
+        
+        vocal_options = ["female vocal", "male vocal", "duet", "choir", "instrumental", 
+                        "vocal harmony", "rap", "spoken word"]
+        
+        mood_options = ["energetic", "melancholic", "uplifting", "calm", "aggressive", "romantic", 
+                       "dreamy", "dark", "happy", "sad", "nostalgic", "epic", "peaceful", "intense", 
+                       "playful", "mysterious"]
+        
+        tempo_options = ["very slow", "slow", "medium", "fast", "very fast"]
+        
+        # Randomize tag selections
+        self.genre_var.set(random.choice(genre_options))
+        self.vocal_var.set(random.choice(vocal_options))
+        self.mood_var.set(random.choice(mood_options))
+        self.tempo_var.set(random.choice(tempo_options))
+        
+        # Randomize generation parameters
+        # Top-K: 20-100
+        self.topk_var.set(str(random.randint(20, 100)))
+        
+        # Temperature: 0.5-1.5 (reasonable range)
+        self.temperature_var.set(f"{random.uniform(0.5, 1.5):.2f}")
+        
+        # CFG Scale: 1.0-2.5 (reasonable range)
+        self.cfg_scale_var.set(f"{random.uniform(1.0, 2.5):.2f}")
+        
+        # Seed: random
+        seed = random.randint(0, 2147483647)
+        self.seed_var.set(str(seed))
+        
+        # Update tag display
+        self.build_tags_from_dropdowns()
+        
+        self.log("Randomized all tags and parameters")
+    
+    def on_tab_changed(self, event):
+        """Handle tab change to show/hide log based on active tab"""
+        current_tab = self.notebook.index(self.notebook.select())
+        
+        # Tab indices: 0=Generation, 1=Batch, 2=Library, 3=Settings, 4=Info
+        if current_tab == 2:  # Library tab
+            # Hide log frame to maximize library space
+            self.log_frame.grid_remove()
+        else:
+            # Show log frame for other tabs
+            self.log_frame.grid()
+    
     def clear_form(self):
-        for var in self.tag_vars.values():
-            var.set(False)
+        # Reset dropdowns to defaults
+        self.genre_var.set("pop")
+        self.vocal_var.set("female vocal")
+        self.mood_var.set("energetic")
+        self.tempo_var.set("medium")
+        self.custom_tags_var.set("")
+        
+        # Clear lyrics
         self.lyrics_text.delete('1.0', tk.END)
         self.lyrics_text.insert('1.0', "[Intro]\n\n[Verse]\n\n[Chorus]\n\n[Outro]\n")
+        
+        # Reset filename
         self.filename_var.set("output")
+        
+        # Rebuild tags preview
+        self.build_tags_from_dropdowns()
+        
         self.log("Form cleared")
     
     def save_config(self):
@@ -1345,33 +1567,314 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
         
         self.log(f"Theme changed to: {theme_name}")
     
-    def update_progress(self, step, current, total):
-        """Update progress bars with current step information"""
-        if step == "prompt":
-            self.progress_prompt['maximum'] = total
-            self.progress_prompt['value'] = current
-            self.progress_prompt_label.config(text=f"{current}/{total}")
-        elif step == "frames":
-            self.progress_frames['maximum'] = total
-            self.progress_frames['value'] = current
-            self.progress_frames_label.config(text=f"{current}/{total}")
-            self.log(f"Generating frame {current}/{total}")
-        elif step == "decode":
-            self.progress_decode['maximum'] = total
-            self.progress_decode['value'] = current
-            self.progress_decode_label.config(text=f"{current}/{total}")
-        
-        self.root.update_idletasks()
     
-    def reset_progress(self):
-        """Reset all progress bars to zero"""
-        self.progress_prompt['value'] = 0
-        self.progress_prompt_label.config(text="0/0")
-        self.progress_frames['value'] = 0
-        self.progress_frames_label.config(text="0/0")
-        self.progress_decode['value'] = 0
-        self.progress_decode_label.config(text="0/0")
-        self.root.update_idletasks()
+    # Music Library Methods
+    def load_generation_history(self):
+        """Load generation history from JSON file"""
+        history_file = "generation_history.json"
+        try:
+            if os.path.exists(history_file):
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    self.generation_history = json.load(f)
+                self.log(f"Loaded {len(self.generation_history)} items from history")
+            else:
+                self.generation_history = []
+        except Exception as e:
+            self.log(f"Error loading history: {e}")
+            self.generation_history = []
+    
+    def save_generation_to_history(self, file_path, settings):
+        """Save a generation to history"""
+        history_file = "generation_history.json"
+        try:
+            history_entry = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "file_path": str(file_path),
+                "filename": os.path.basename(file_path),
+                "settings": settings
+            }
+            
+            self.generation_history.insert(0, history_entry)
+            
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.generation_history, f, indent=2, ensure_ascii=False)
+            
+            if hasattr(self, 'library_scrollable'):
+                self.populate_library()
+                
+        except Exception as e:
+            self.log(f"Error saving to history: {e}")
+    
+    def populate_library(self):
+        """Populate the library with all generated songs in 3-column grid"""
+        for widget in self.library_scrollable.winfo_children():
+            widget.destroy()
+        
+        if not self.generation_history:
+            empty_frame = ttk.Frame(self.library_scrollable)
+            empty_frame.pack(fill=tk.BOTH, expand=True, pady=50)
+            ttk.Label(empty_frame, text="🎵 No songs in library yet", 
+                     font=('TkDefaultFont', 14)).pack(pady=10)
+            ttk.Label(empty_frame, text="Generate some music to see it here!", 
+                     foreground="gray").pack()
+            return
+        
+        # Configure grid columns for 3-column layout
+        self.library_scrollable.columnconfigure(0, weight=1, uniform="card")
+        self.library_scrollable.columnconfigure(1, weight=1, uniform="card")
+        self.library_scrollable.columnconfigure(2, weight=1, uniform="card")
+        
+        for idx, entry in enumerate(self.generation_history):
+            row = idx // 3
+            col = idx % 3
+            self.create_library_card(entry, idx, row, col)
+    
+    def create_library_card(self, entry, idx, row, col):
+        """Create a compact card widget for a library entry in grid layout"""
+        # Compact card with reduced padding and subtle styling
+        card = ttk.LabelFrame(self.library_scrollable, text=f"🎵 {entry['filename']}", 
+                             padding="6", relief=tk.RIDGE, borderwidth=1)
+        card.grid(row=row, column=col, sticky=(tk.W, tk.E, tk.N, tk.S), padx=4, pady=4)
+        
+        # Compact info with smaller font and better styling
+        info_frame = ttk.Frame(card)
+        info_frame.pack(fill=tk.X, pady=(0, 4))
+        timestamp_label = ttk.Label(info_frame, text=f"📅 {entry['timestamp']}", 
+                                   font=('TkDefaultFont', 8), foreground="#616161")
+        timestamp_label.pack(side=tk.LEFT)
+        
+        settings_frame = ttk.LabelFrame(card, text="Settings", padding="3")
+        settings_frame.pack(fill=tk.X, pady=3)
+        
+        settings = entry.get('settings', {})
+        settings_grid = ttk.Frame(settings_frame)
+        settings_grid.pack(fill=tk.X)
+        
+        row_idx = 0
+        # Compact settings display with smaller fonts
+        ttk.Label(settings_grid, text="Tags:", font=('TkDefaultFont', 8, 'bold')).grid(row=row_idx, column=0, sticky=tk.W, padx=2, pady=1)
+        tags_label = ttk.Label(settings_grid, text=settings.get('tags', 'N/A'), foreground="#2E7D32", font=('TkDefaultFont', 8))
+        tags_label.grid(row=row_idx, column=1, sticky=tk.W, padx=2, pady=1)
+        
+        row_idx += 1
+        duration_sec = settings.get('max_length_ms', 0) / 1000
+        ttk.Label(settings_grid, text="Duration:", font=('TkDefaultFont', 8, 'bold')).grid(row=row_idx, column=0, sticky=tk.W, padx=2, pady=1)
+        ttk.Label(settings_grid, text=f"{duration_sec:.0f}s", font=('TkDefaultFont', 8)).grid(row=row_idx, column=1, sticky=tk.W, padx=2, pady=1)
+        
+        row_idx += 1
+        ttk.Label(settings_grid, text="Seed:", font=('TkDefaultFont', 8, 'bold')).grid(row=row_idx, column=0, sticky=tk.W, padx=2, pady=1)
+        ttk.Label(settings_grid, text=str(settings.get('seed', 'N/A')), font=('TkDefaultFont', 8)).grid(row=row_idx, column=1, sticky=tk.W, padx=2, pady=1)
+        
+        row_idx += 1
+        params_text = f"T:{settings.get('temperature', 'N/A')} K:{settings.get('topk', 'N/A')} C:{settings.get('cfg_scale', 'N/A')}"
+        ttk.Label(settings_grid, text="Params:", font=('TkDefaultFont', 8, 'bold')).grid(row=row_idx, column=0, sticky=tk.W, padx=2, pady=1)
+        ttk.Label(settings_grid, text=params_text, font=('TkDefaultFont', 8)).grid(row=row_idx, column=1, sticky=tk.W, padx=2, pady=1)
+        
+        if 'lyrics' in settings and settings['lyrics']:
+            row_idx += 1
+            lyrics_preview = settings['lyrics'][:50] + "..." if len(settings['lyrics']) > 50 else settings['lyrics']
+            ttk.Label(settings_grid, text="Lyrics:", font=('TkDefaultFont', 8, 'bold')).grid(row=row_idx, column=0, sticky=tk.W, padx=2, pady=1)
+            ttk.Label(settings_grid, text=lyrics_preview, foreground="gray", wraplength=200, font=('TkDefaultFont', 7)).grid(row=row_idx, column=1, sticky=tk.W, padx=2, pady=1)
+        
+        # Inline audio player with waveform
+        if os.path.exists(entry['file_path']) and AUDIO_PLAYER_AVAILABLE:
+            try:
+                player = InlineAudioPlayer(card, entry['file_path'], THEMES[self.current_theme]["bg"])
+            except Exception as e:
+                # Fallback to simple button if player fails
+                ttk.Label(card, text=f"⚠️ Player error: {str(e)}", foreground="orange").pack(pady=5)
+        
+        # Compact path display
+        path_frame = ttk.Frame(card)
+        path_frame.pack(fill=tk.X, pady=2)
+        ttk.Label(path_frame, text="📁", font=('TkDefaultFont', 7)).pack(side=tk.LEFT)
+        path_text = entry['file_path'] if len(entry['file_path']) < 40 else "..." + entry['file_path'][-37:]
+        ttk.Label(path_frame, text=path_text, foreground="gray", font=('TkDefaultFont', 7)).pack(side=tk.LEFT, padx=2)
+        
+        # Colorful button frame with styled buttons and tooltips
+        button_frame = ttk.Frame(card)
+        button_frame.pack(fill=tk.X, pady=(3, 0))
+        
+        if os.path.exists(entry['file_path']):
+            # Additional utility buttons with colors and tooltips
+            if not AUDIO_PLAYER_AVAILABLE:
+                # Fallback play button if inline player not available
+                play_btn = tk.Button(button_frame, text="▶️", width=3, bg="#4CAF50", fg="white",
+                                    relief=tk.RAISED, cursor="hand2",
+                                    command=lambda p=entry['file_path']: self.play_audio(p))
+                play_btn.pack(side=tk.LEFT, padx=1)
+                self.create_tooltip(play_btn, "Play audio file")
+            
+            folder_btn = tk.Button(button_frame, text="📂", width=3, bg="#2196F3", fg="white",
+                                  relief=tk.RAISED, cursor="hand2",
+                                  command=lambda p=entry['file_path']: self.open_file_location(p))
+            folder_btn.pack(side=tk.LEFT, padx=1)
+            self.create_tooltip(folder_btn, "Open folder location")
+            
+            download_btn = tk.Button(button_frame, text="💾", width=3, bg="#9C27B0", fg="white",
+                                    relief=tk.RAISED, cursor="hand2",
+                                    command=lambda p=entry['file_path']: self.download_song(p))
+            download_btn.pack(side=tk.LEFT, padx=1)
+            self.create_tooltip(download_btn, "Save copy to another location")
+        else:
+            ttk.Label(button_frame, text="⚠️ Not found", foreground="red", font=('TkDefaultFont', 7)).pack(side=tk.LEFT, padx=2)
+        
+        reload_btn = tk.Button(button_frame, text="🔄", width=3, bg="#FF9800", fg="white",
+                              relief=tk.RAISED, cursor="hand2",
+                              command=lambda s=settings: self.reload_settings(s))
+        reload_btn.pack(side=tk.LEFT, padx=1)
+        self.create_tooltip(reload_btn, "Load these settings into generator")
+        
+        delete_btn = tk.Button(button_frame, text="🗑️", width=3, bg="#F44336", fg="white",
+                              relief=tk.RAISED, cursor="hand2",
+                              command=lambda i=idx: self.remove_from_library(i))
+        delete_btn.pack(side=tk.RIGHT, padx=1)
+        self.create_tooltip(delete_btn, "Remove from library")
+    
+    def play_audio(self, file_path):
+        """Play audio file using system default player"""
+        try:
+            import platform
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':
+                os.system(f'open "{file_path}"')
+            else:
+                os.system(f'xdg-open "{file_path}"')
+            self.log(f"Playing: {os.path.basename(file_path)}")
+        except Exception as e:
+            self.log(f"Error playing audio: {e}")
+            messagebox.showerror("Error", f"Could not play audio:\n{e}")
+    
+    def open_file_location(self, file_path):
+        """Open file location in file explorer"""
+        try:
+            import platform
+            folder = os.path.dirname(file_path)
+            if platform.system() == 'Windows':
+                os.startfile(folder)
+            elif platform.system() == 'Darwin':
+                os.system(f'open "{folder}"')
+            else:
+                os.system(f'xdg-open "{folder}"')
+            self.log(f"Opened folder: {folder}")
+        except Exception as e:
+            self.log(f"Error opening folder: {e}")
+            messagebox.showerror("Error", f"Could not open folder:\n{e}")
+    
+    def download_song(self, file_path):
+        """Copy song to a user-selected location"""
+        try:
+            import shutil
+            default_name = os.path.basename(file_path)
+            save_path = filedialog.asksaveasfilename(
+                title="Save Song As",
+                defaultextension=".mp3",
+                initialfile=default_name,
+                filetypes=[("MP3 files", "*.mp3"), ("All files", "*.*")]
+            )
+            if save_path:
+                shutil.copy2(file_path, save_path)
+                self.log(f"Song copied to: {save_path}")
+                messagebox.showinfo("Success", f"Song saved to:\n{save_path}")
+        except Exception as e:
+            self.log(f"Error downloading song: {e}")
+            messagebox.showerror("Error", f"Could not save song:\n{e}")
+    
+    def reload_settings(self, settings):
+        """Reload settings into the generation tab"""
+        try:
+            if 'tags' in settings:
+                tags = settings['tags'].split(',')
+                if len(tags) >= 1:
+                    self.genre_var.set(tags[0].strip())
+                if len(tags) >= 2:
+                    self.vocal_var.set(tags[1].strip())
+                if len(tags) >= 3:
+                    self.mood_var.set(tags[2].strip())
+                if len(tags) >= 4:
+                    self.tempo_var.set(tags[3].strip())
+                if len(tags) > 4:
+                    custom = ','.join([t.strip() for t in tags[4:]])
+                    self.custom_tags_var.set(custom)
+                self.build_tags_from_dropdowns()
+            
+            if 'lyrics' in settings:
+                self.lyrics_text.delete('1.0', tk.END)
+                self.lyrics_text.insert('1.0', settings['lyrics'])
+            
+            if 'max_length_ms' in settings:
+                seconds = settings['max_length_ms'] // 1000
+                self.audio_length_seconds.set(seconds)
+            
+            if 'topk' in settings:
+                self.topk_var.set(str(settings['topk']))
+            
+            if 'temperature' in settings:
+                self.temperature_var.set(str(settings['temperature']))
+            
+            if 'cfg_scale' in settings:
+                self.cfg_scale_var.set(str(settings['cfg_scale']))
+            
+            if 'seed' in settings:
+                self.seed_var.set(str(settings['seed']))
+            
+            self.log("Settings reloaded from library")
+            messagebox.showinfo("Success", "Settings loaded! Switch to Generation tab to use them.")
+        except Exception as e:
+            self.log(f"Error reloading settings: {e}")
+            messagebox.showerror("Error", f"Could not reload settings:\n{e}")
+    
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            label = tk.Label(tooltip, text=text, background="#FFFFE0", relief=tk.SOLID, borderwidth=1,
+                           font=('TkDefaultFont', 8), padx=5, pady=2)
+            label.pack()
+            widget.tooltip = tooltip
+        
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+        
+        widget.bind('<Enter>', on_enter)
+        widget.bind('<Leave>', on_leave)
+    
+    def remove_from_library(self, idx):
+        """Remove entry from library"""
+        try:
+            if messagebox.askyesno("Confirm", "Remove this entry from library?\n(The file will not be deleted)"):
+                entry = self.generation_history.pop(idx)
+                with open("generation_history.json", 'w', encoding='utf-8') as f:
+                    json.dump(self.generation_history, f, indent=2, ensure_ascii=False)
+                self.log(f"Removed from library: {entry['filename']}")
+                self.populate_library()
+        except Exception as e:
+            self.log(f"Error removing from library: {e}")
+            messagebox.showerror("Error", f"Could not remove entry:\n{e}")
+    
+    def refresh_library(self):
+        """Refresh the library display"""
+        self.load_generation_history()
+        self.populate_library()
+        self.log("Library refreshed")
+    
+    def clear_library_history(self):
+        """Clear all library history"""
+        if messagebox.askyesno("Confirm", "Clear entire library history?\n(Generated files will not be deleted)"):
+            self.generation_history = []
+            try:
+                if os.path.exists("generation_history.json"):
+                    os.remove("generation_history.json")
+                self.populate_library()
+                self.log("Library history cleared")
+            except Exception as e:
+                self.log(f"Error clearing history: {e}")
+                messagebox.showerror("Error", f"Could not clear history:\n{e}")
 
 
 def main():

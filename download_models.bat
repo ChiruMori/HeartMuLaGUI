@@ -106,22 +106,50 @@ if errorlevel 1 (
 echo.
 echo [2/3] Downloading HeartMuLa-oss-3B (main model, ~8 GB)...
 echo This is the largest file - please be patient...
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-oss-3B', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
+echo Trying new model version (20260123)...
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-RL-oss-3B-20260123', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
 if errorlevel 1 (
-    echo ERROR: Failed to download HeartMuLa-oss-3B
+    echo WARNING: Failed to download new version, trying fallback (old version)...
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-oss-3B', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
+    if errorlevel 1 (
+        echo ERROR: Failed to download HeartMuLa-oss-3B from both sources
+        pause
+        exit /b 1
+    )
+)
+
+REM Verify HeartMuLa download
+if not exist "ckpt\HeartMuLa-oss-3B\config.json" (
+    echo ERROR: HeartMuLa-oss-3B downloaded but config.json is missing!
+    echo The download may have been incomplete. Please try again.
     pause
     exit /b 1
 )
+echo [OK] HeartMuLa-oss-3B downloaded successfully
 
 echo.
 echo [3/3] Downloading HeartCodec-oss (audio codec, ~2 GB)...
 echo Final download - almost done!
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
+echo Trying new model version (20260123)...
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss-20260123', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
 if errorlevel 1 (
-    echo ERROR: Failed to download HeartCodec-oss
+    echo WARNING: Failed to download new version, trying fallback (old version)...
+    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
+    if errorlevel 1 (
+        echo ERROR: Failed to download HeartCodec-oss from both sources
+        pause
+        exit /b 1
+    )
+)
+
+REM Verify HeartCodec download
+if not exist "ckpt\HeartCodec-oss\config.json" (
+    echo ERROR: HeartCodec-oss downloaded but config.json is missing!
+    echo The download may have been incomplete. Please try again.
     pause
     exit /b 1
 )
+echo [OK] HeartCodec-oss downloaded successfully
 
 echo.
 echo ========================================

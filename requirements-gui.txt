@@ -29,5 +29,13 @@ numpy>=1.24.0
 # GUI image support
 Pillow>=10.0.0
 
+# Audio player dependencies (for Music Library inline player)
+# These are optional - GUI will work without them but use external player
+pygame>=2.5.0
+pydub>=0.25.1
+librosa>=0.10.0
+matplotlib>=3.7.0
+
 # Note: tkinter is included with Python standard library
 # Triton is installed separately via setup_gui.bat from local wheel file
+# Audio player requires: pygame, pydub, librosa, matplotlib (optional but recommended)

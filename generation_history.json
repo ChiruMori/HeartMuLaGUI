@@ -1,0 +1,86 @@
+[
+  {
+    "timestamp": "2026-01-23 13:20:09",
+    "file_path": "output\\output_20260123_131229.mp3",
+    "filename": "output_20260123_131229.mp3",
+    "settings": {
+      "tags": "punk,choir,epic,very slow",
+      "lyrics": "[Intro]\nmiau meow meow\n\n[Verse]\nmeow meow meow miau miau\n[Chorus]\nmiau meow meow meow\n[Outro]\nmiau miau",
+      "max_length_ms": 30000,
+      "topk": 23,
+      "temperature": 1.49,
+      "cfg_scale": 1.41,
+      "seed": 794276053
+    }
+  },
+  {
+    "timestamp": "2026-01-23 13:09:28",
+    "file_path": "output\\output_20260123_130238.mp3",
+    "filename": "output_20260123_130238.mp3",
+    "settings": {
+      "tags": "r&b,duet,nostalgic,medium",
+      "lyrics": "[Intro]\nmeow meow\n\n[Verse]\nmeow meow meow\n[Chorus]\nmeow meow meow\n[Outro]\nmiau miau",
+      "max_length_ms": 30000,
+      "topk": 54,
+      "temperature": 1.46,
+      "cfg_scale": 1.97,
+      "seed": 364973500
+    }
+  },
+  {
+    "timestamp": "2026-01-22 10:46:51",
+    "file_path": "output\\output_20260122_103518.mp3",
+    "filename": "output_20260122_103518.mp3",
+    "settings": {
+      "tags": "country,choir,melancholic,fast,cat",
+      "lyrics": "[Intro]\n\n[Verse]\n\n[Chorus]\n\n[Outro]",
+      "max_length_ms": 60000,
+      "topk": 50,
+      "temperature": 1.0,
+      "cfg_scale": 1.5,
+      "seed": 418168495
+    }
+  },
+  {
+    "timestamp": "2026-01-22 09:12:27",
+    "file_path": "output\\output_20260122_085920.mp3",
+    "filename": "output_20260122_085920.mp3",
+    "settings": {
+      "tags": "rock,choir,aggressive,very fast",
+      "lyrics": "[Verse]\nMeow meow meow, meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow?\n[Chorus]\nMeow meow, meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\n[Verse]\nMeow meow meow? Meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow?\n[Chorus]\nMeow meow, meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\n[Bridge]\nMeow meow meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow\nMeow meow meow meow\n[Outro]\nMeow meow, meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\nMeow meow meow",
+      "max_length_ms": 60000,
+      "topk": 50,
+      "temperature": 1.0,
+      "cfg_scale": 1.5,
+      "seed": 1514509943
+    }
+  },
+  {
+    "timestamp": "2026-01-22 08:56:06",
+    "file_path": "output\\output_20260122_083257.mp3",
+    "filename": "output_20260122_083257.mp3",
+    "settings": {
+      "tags": "folk,female vocal,energetic,medium",
+      "lyrics": "[Verse]\nMeow meow meow, meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow?\n[Chorus]\nMeow meow, meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\n[Verse]\nMeow meow meow? Meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow?\n[Chorus]\nMeow meow, meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\n[Bridge]\nMeow meow meow meow meow meow\nMeow meow meow, meow meow meow meow\nMeow meow meow meow\nMeow meow meow meow\nMeow meow meow meow\n[Outro]\nMeow meow, meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow meow\nMeow meow meow\nMeow meow meow\nMeow meow meow",
+      "max_length_ms": 120000,
+      "topk": 50,
+      "temperature": 1.0,
+      "cfg_scale": 1.5,
+      "seed": 337316453
+    }
+  },
+  {
+    "timestamp": "2026-01-22 08:08:29",
+    "file_path": "output\\output_20260122_080101.mp3",
+    "filename": "output_20260122_080101.mp3",
+    "settings": {
+      "tags": "pop,female vocal,energetic,medium",
+      "lyrics": "[Intro]\n\n[Verse]\n[07:59:45] ✓ CUDA available - GPU: NVIDIA GeForce RTX 4070 Laptop GPU\n[07:59:45] ✓ VRAM: 8.00 GB\n[07:59:45] Settings loaded from config file\n[07:59:45] Theme changed to: Dark Blue/Grey\n[07:59:46] Loading model... This may take a few minutes.\n[07:59:53] Model loaded successfully!\n[Chorus]\n[07:59:45] ✓ CUDA available - GPU: NVIDIA GeForce RTX 4070 Laptop GPU\n[07:59:45] ✓ VRAM: 8.00 GB\n[07:59:45] Settings loaded from config file\n[07:59:45] Theme changed to: Dark Blue/Grey\n[07:59:46] Loading model... This may take a few minutes.\n[07:59:53] Model loaded successfully!\n[Outro]",
+      "max_length_ms": 30000,
+      "topk": 50,
+      "temperature": 1.0,
+      "cfg_scale": 1.5,
+      "seed": 329986726
+    }
+  }
+]
