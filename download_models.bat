@@ -106,7 +106,7 @@ if errorlevel 1 (
 echo.
 echo [2/3] Downloading HeartMuLa-oss-3B (main model, ~8 GB)...
 echo This is the largest file - please be patient...
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-oss-3B', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-RL-oss-3B-20260123', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
 if errorlevel 1 (
     echo ERROR: Failed to download HeartMuLa-oss-3B
     pause
@@ -116,7 +116,7 @@ if errorlevel 1 (
 echo.
 echo [3/3] Downloading HeartCodec-oss (audio codec, ~2 GB)...
 echo Final download - almost done!
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss-20260123', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
 if errorlevel 1 (
     echo ERROR: Failed to download HeartCodec-oss
     pause
