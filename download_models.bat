@@ -17,7 +17,7 @@ pause
 
 REM Check if venv exists and activate it
 if exist "venv\Scripts\activate.bat" (
-    echo Activating virtual environment
+    echo Activating virtual environment...
     call venv\Scripts\activate.bat
 ) else (
     echo WARNING: Virtual environment not found. Using system Python.
@@ -29,13 +29,13 @@ if exist "venv\Scripts\activate.bat" (
 REM Check if huggingface-cli is installed
 python -c "import huggingface_hub" 2>nul
 if errorlevel 1 (
-    echo Installing huggingface_hub
+    echo Installing huggingface_hub...
     python -m pip install huggingface_hub
 )
 
 echo.
 echo ========================================
-echo Checking existing models 
+echo Checking existing models...
 echo ========================================
 
 set MODELS_EXIST=0
@@ -81,7 +81,7 @@ if %MODELS_EXIST%==4 (
 
 echo.
 echo ========================================
-echo Downloading models from Hugging Face
+echo Downloading models from Hugging Face...
 echo ========================================
 echo.
 echo This may take 10-30 minutes depending on your internet speed.
@@ -90,8 +90,8 @@ echo.
 REM Create ckpt directory if it doesn't exist
 if not exist "ckpt" mkdir ckpt
 
-echo [1/3] Downloading HeartMuLaGen (tokenizer and config) 
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLaGen', local_dir='./ckpt')"
+echo [1/3] Downloading HeartMuLaGen (tokenizer and config)...
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLaGen', local_dir='./ckpt', local_dir_use_symlinks=False)"
 if errorlevel 1 (
     echo ERROR: Failed to download HeartMuLaGen
     echo.
@@ -104,38 +104,28 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Downloading HeartMuLa-oss-3B (main model, ~8 GB)
-echo This is the largest file - please be patient
-echo Trying new model version (20260123)
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-RL-oss-3B-20260123', local_dir='./ckpt/HeartMuLa-oss-3B')"
+echo [2/3] Downloading HeartMuLa-oss-3B (main model, ~8 GB)...
+echo This is the largest file - please be patient...
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-oss-3B', local_dir='./ckpt/HeartMuLa-oss-3B', local_dir_use_symlinks=False)"
 if errorlevel 1 (
-    echo WARNING: Failed to download new version, trying fallback (old version)
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartMuLa-oss-3B', local_dir='./ckpt/HeartMuLa-oss-3B')"
-    if errorlevel 1 (
-        echo ERROR: Failed to download HeartMuLa-oss-3B from both sources
-        pause
-        exit /b 1
-    )
+    echo ERROR: Failed to download HeartMuLa-oss-3B
+    pause
+    exit /b 1
 )
 
 echo.
-echo [3/3] Downloading HeartCodec-oss (audio codec, ~2 GB)
+echo [3/3] Downloading HeartCodec-oss (audio codec, ~2 GB)...
 echo Final download - almost done!
-echo Trying new model version (20260123)
-python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss-20260123', local_dir='./ckpt/HeartCodec-oss')"
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss', local_dir='./ckpt/HeartCodec-oss', local_dir_use_symlinks=False)"
 if errorlevel 1 (
-    echo WARNING: Failed to download new version, trying fallback (old version)
-    python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='HeartMuLa/HeartCodec-oss', local_dir='./ckpt/HeartCodec-oss')"
-    if errorlevel 1 (
-        echo ERROR: Failed to download HeartCodec-oss from both sources
-        pause
-        exit /b 1
-    )
+    echo ERROR: Failed to download HeartCodec-oss
+    pause
+    exit /b 1
 )
 
 echo.
 echo ========================================
-echo Verifying download 
+echo Verifying download...
 echo ========================================
 echo.
 
