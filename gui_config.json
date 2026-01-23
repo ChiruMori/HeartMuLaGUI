@@ -1,0 +1,10 @@
+{
+  "output_folder": "./output",
+  "version": "3B",
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "auto_load": true,
+  "timestamp": false,
+  "lazy_load": true,
+  "theme": "Dark Blue/Grey"
+}

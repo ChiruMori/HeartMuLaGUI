@@ -259,6 +259,7 @@ class HeartMuLaGUI:
         
         # Load generation history after all UI elements are created
         self.load_generation_history()
+        self.cleanup_deleted_files()
         self.populate_library()
         
     def setup_generation_tab(self, parent):
@@ -538,12 +539,6 @@ class HeartMuLaGUI:
     def setup_settings_tab(self, parent):
         row = 0
         
-        ttk.Label(parent, text="Model Path:").grid(row=row, column=0, sticky=tk.W, pady=5)
-        self.model_path_var = tk.StringVar(value="./ckpt")
-        ttk.Entry(parent, textvariable=self.model_path_var, width=50).grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
-        ttk.Button(parent, text="Browse", command=self.browse_model_path).grid(row=row, column=2, padx=5)
-        
-        row += 1
         ttk.Label(parent, text="Output Folder:").grid(row=row, column=0, sticky=tk.W, pady=5)
         self.output_folder_var = tk.StringVar(value="./output")
         ttk.Entry(parent, textvariable=self.output_folder_var, width=50).grid(row=row, column=1, sticky=(tk.W, tk.E), padx=5)
@@ -568,24 +563,20 @@ class HeartMuLaGUI:
         dtype_combo.grid(row=row, column=1, sticky=tk.W, padx=5)
         
         row += 1
+        row += 1
         ttk.Separator(parent, orient='horizontal').grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20)
         
         row += 1
         ttk.Label(parent, text="Optimization:", font=('TkDefaultFont', 9, 'bold')).grid(row=row, column=0, sticky=tk.W, pady=5)
         
         row += 1
-        self.use_fp8_var = tk.BooleanVar(value=BITSANDBYTES_AVAILABLE)
-        fp8_check = ttk.Checkbutton(parent, text="Enable FP8 Quantization (50% less VRAM)", variable=self.use_fp8_var)
-        fp8_check.grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=5)
-        if not BITSANDBYTES_AVAILABLE:
-            fp8_check.config(state='disabled')
+        self.lazy_load_var = tk.BooleanVar(value=False)
+        lazy_check = ttk.Checkbutton(parent, text="Enable Lazy Loading (Load models on-demand, saves VRAM)", variable=self.lazy_load_var)
+        lazy_check.grid(row=row, column=0, columnspan=2, sticky=tk.W, pady=5)
         
         row += 1
-        if BITSANDBYTES_AVAILABLE:
-            fp8_status = ttk.Label(parent, text="✓ bitsandbytes available", foreground="green")
-        else:
-            fp8_status = ttk.Label(parent, text="✗ bitsandbytes not installed (pip install bitsandbytes)", foreground="orange")
-        fp8_status.grid(row=row, column=0, columnspan=3, sticky=tk.W, padx=20)
+        lazy_info = ttk.Label(parent, text="ℹ Models load only when generating music, reducing memory usage", foreground="gray", font=('TkDefaultFont', 8))
+        lazy_info.grid(row=row, column=0, columnspan=3, sticky=tk.W, padx=20)
         
         row += 1
         ttk.Separator(parent, orient='horizontal').grid(row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20)
@@ -627,6 +618,7 @@ class HeartMuLaGUI:
         self.model_status_label.grid(row=0, column=2, padx=20)
         
         parent.columnconfigure(1, weight=1)
+    
         
     def setup_info_tab(self, parent):
         """Setup the Info tab with links to GitHub repositories and documentation"""
@@ -923,7 +915,6 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 self.update_status("Loading model...")
                 self.load_model_btn.config(state='disabled')
                 
-                model_path = self.model_path_var.get()
                 device = torch.device(self.device_var.get())
                 
                 dtype_map = {
@@ -933,18 +924,21 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 }
                 dtype = dtype_map[self.dtype_var.get()]
                 
-                # Note: bnb_config is no longer supported in updated heartlib
-                # Use optimized loading mode with FP8 models instead
-                if self.use_fp8_var.get():
-                    self.log("FP8 mode enabled - use 'optimized' loading mode for FP8 models")
+                lazy_load = self.lazy_load_var.get()
+                if lazy_load:
+                    self.log("Lazy loading enabled - models will load on-demand to save VRAM")
+                else:
+                    self.log("Lazy loading disabled - Loading models onto device now...")
                 
+                # Load pipeline from ckpt folder
+                self.log("Loading from ckpt folder...")
                 self.pipe = HeartMuLaGenPipeline.from_pretrained(
-                    model_path,
+                    "./ckpt",
                     device=device,
                     dtype=dtype,
-                    version=self.version_var.get()
-                )
-                
+                    version=self.version_var.get(),
+                    lazy_load=lazy_load
+                )              
                 self.log("Model loaded successfully!")
                 self.update_status("Model loaded - Ready")
                 self.model_status_label.config(text="Model: Loaded", foreground="green")
@@ -972,8 +966,7 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 else:
                     print("  ⚠ CUDA NOT AVAILABLE - This is likely the problem!")
                 print(f"\nDevice requested: {self.device_var.get()}")
-                print(f"Model path: {self.model_path_var.get()}")
-                print(f"FP8 enabled: {self.use_fp8_var.get()}")
+                print(f"Lazy load: {lazy_load}")
                 print("="*60 + "\n")
                 
                 # Log to GUI
@@ -1392,14 +1385,13 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
     
     def save_config(self):
         config = {
-            "model_path": self.model_path_var.get(),
             "output_folder": self.output_folder_var.get(),
             "version": self.version_var.get(),
             "device": self.device_var.get(),
             "dtype": self.dtype_var.get(),
             "auto_load": self.auto_load_var.get(),
             "timestamp": self.timestamp_var.get(),
-            "use_fp8": self.use_fp8_var.get(),
+            "lazy_load": self.lazy_load_var.get(),
             "theme": self.theme_var.get(),
         }
         
@@ -1417,14 +1409,13 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
                 with open("gui_config.json", "r") as f:
                     config = json.load(f)
                 
-                self.model_path_var.set(config.get("model_path", "./ckpt"))
                 self.output_folder_var.set(config.get("output_folder", "./output"))
                 self.version_var.set(config.get("version", "3B"))
                 self.device_var.set(config.get("device", "cuda"))
                 self.dtype_var.set(config.get("dtype", "bfloat16"))
                 self.auto_load_var.set(config.get("auto_load", False))
                 self.timestamp_var.set(config.get("timestamp", True))
-                self.use_fp8_var.set(config.get("use_fp8", BITSANDBYTES_AVAILABLE))
+                self.lazy_load_var.set(config.get("lazy_load", False))
                 
                 # Load and apply theme
                 saved_theme = config.get("theme", "Dark Blue/Grey")
@@ -1582,6 +1573,34 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
         except Exception as e:
             self.log(f"Error loading history: {e}")
             self.generation_history = []
+    
+    def cleanup_deleted_files(self):
+        """Remove library entries for files that no longer exist"""
+        if not self.generation_history:
+            return
+        
+        initial_count = len(self.generation_history)
+        removed_count = 0
+        
+        # Filter out entries where the file no longer exists
+        valid_entries = []
+        for entry in self.generation_history:
+            file_path = entry.get('file_path', '')
+            if file_path and os.path.exists(file_path):
+                valid_entries.append(entry)
+            else:
+                removed_count += 1
+        
+        # Update history if any files were removed
+        if removed_count > 0:
+            self.generation_history = valid_entries
+            try:
+                history_file = "generation_history.json"
+                with open(history_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.generation_history, f, indent=2, ensure_ascii=False)
+                self.log(f"Cleaned up {removed_count} deleted file(s) from library")
+            except Exception as e:
+                self.log(f"Error saving cleaned history: {e}")
     
     def save_generation_to_history(self, file_path, settings):
         """Save a generation to history"""
@@ -1860,6 +1879,7 @@ See LICENSE and LICENSE-ORIGINAL files for details."""
     def refresh_library(self):
         """Refresh the library display"""
         self.load_generation_history()
+        self.cleanup_deleted_files()
         self.populate_library()
         self.log("Library refreshed")
     
