@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 REM Set Python 3.10 path
-set PYTHON310_PATH=D:\AI\heartlib\drivers\310\python.exe
+set PYTHON310_PATH=C:\sw\python310\python.exe
 set TRITON_URL=https://huggingface.co/madbuda/triton-windows-builds/resolve/main/triton-2.1.0-cp310-cp310-win_amd64.whl
 
 REM Check if Python 3.10 exists at specified location
@@ -49,7 +49,7 @@ python -m pip install --upgrade pip
 
 echo.
 echo [4/6] Installing PyTorch with CUDA support...
-python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 (
     echo ERROR: Failed to install PyTorch with CUDA
     pause

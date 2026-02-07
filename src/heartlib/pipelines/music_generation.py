@@ -339,7 +339,10 @@ class HeartMuLaGenPipeline:
         frames = model_outputs["frames"].to(self.codec_device)
         wav = self.codec.detokenize(frames)
         self._unload()
-        torchaudio.save(save_path, wav.to(torch.float32).cpu(), 48000)
+        # torchaudio.save(save_path, wav.to(torch.float32).cpu(), 48000)
+        import soundfile as sf
+        audio_np = wav.to(torch.float32).cpu().numpy().T
+        sf.write(save_path, audio_np, 48000)
 
     def __call__(self, inputs: Dict[str, Any], **kwargs):
         preprocess_kwargs, forward_kwargs, postprocess_kwargs = (
